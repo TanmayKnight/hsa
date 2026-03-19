@@ -1,0 +1,13 @@
+version: "3.9"
+
+services:
+  newspaper-processor:
+    build: .
+    volumes:
+      - ./inbox:/app/inbox          # Drop PDFs here to trigger processing
+      - ./processed:/app/processed  # Processed PDFs moved here
+      - ./logs:/app/logs
+      - ./config:/app/config
+    env_file:
+      - .env
+    restart: unless-stopped

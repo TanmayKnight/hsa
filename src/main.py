@@ -1,0 +1,74 @@
+"""
+Entry point for the newspaper PDF processing service.
+
+Usage:
+    python src/main.py                          # Start watching inbox/ for PDFs
+    python src/main.py --process-existing       # Process all existing PDFs in inbox, then watch
+    python src/main.py --run-once               # Process existing PDFs and exit (no watching)
+"""
+
+import argparse
+import logging
+import os
+import sys
+
+# Ensure project root is in path when running as a script
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from src.config_loader import load_config
+from src.watcher import FolderWatcher
+from src.pipeline import Pipeline
+
+
+def setup_logging(log_level: str, log_file: str) -> None:
+    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+
+    fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    datefmt = "%Y-%m-%d %H:%M:%S"
+
+    handlers = [
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(log_file, encoding="utf-8"),
+    ]
+
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper(), logging.INFO),
+        format=fmt,
+        datefmt=datefmt,
+        handlers=handlers,
+    )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Newspaper PDF processor")
+    parser.add_argument(
+        "--process-existing",
+        action="store_true",
+        help="Process all PDFs currently in the inbox before watching for new ones",
+    )
+    parser.add_argument(
+        "--run-once",
+        action="store_true",
+        help="Process existing PDFs in inbox and exit without watching",
+    )
+    args = parser.parse_args()
+
+    config = load_config()
+    setup_logging(config.log_level, config.log_file)
+
+    logger = logging.getLogger(__name__)
+    logger.info("Newspaper PDF Processor starting up")
+    logger.info("LLM provider: %s (%s)", config.llm.provider, config.llm.model)
+    logger.info("Storage provider: %s", config.storage.provider)
+
+    if args.run_once or args.process_existing:
+        pipeline = Pipeline(config)
+        pipeline.run()  # Process all existing inbox files
+
+    if not args.run_once:
+        watcher = FolderWatcher(config)
+        watcher.start()
+
+
+if __name__ == "__main__":
+    main()

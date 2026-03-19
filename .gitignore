@@ -1,0 +1,40 @@
+# Environment & secrets
+.env
+
+# Claude Code
+.claude/
+CLAUDE.md
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+
+# Project directories (keep folders, ignore contents)
+inbox/*
+!inbox/.gitkeep
+processed/*
+!processed/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# Database
+*.db
+
+# PDF files (sample/test files stay local)
+*.pdf

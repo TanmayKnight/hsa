@@ -1,0 +1,36 @@
+# LLM Configuration
+# To switch providers, change 'provider' and update LLM_API_KEY in .env
+llm:
+  provider: gemini # Options: gemini, openai
+  model: gemini-2.5-flash # gemini-2.0-flash-001 supports vision for image PDFs
+
+# Storage Configuration
+# To switch to cloud storage, change 'provider' and add relevant credentials to .env
+storage:
+  provider: local # Options: local, s3, azure, gcs
+  inbox_path: ./inbox
+  processed_path: ./processed
+
+# Email Configuration
+email:
+  smtp_host: smtp.gmail.com
+  smtp_port: 587
+  # Email and password come from .env (EMAIL_SENDER, EMAIL_PASSWORD)
+  subscribers:
+    - tableaulancer@gmail.com
+    - curiousmindshex@gmail.com
+  # send_immediately: true sends email right after processing
+  # Set to false for production and configure a cron schedule
+  send_immediately: true
+  # Used when send_immediately is false:
+  schedule_cron: "0 8 * * *" # 8 AM daily
+
+# Deduplication Configuration
+deduplication:
+  # Cosine similarity threshold (0-1). Articles above this are considered duplicates.
+  similarity_threshold: 0.85
+
+# Logging
+logging:
+  level: INFO
+  log_file: ./logs/app.log
