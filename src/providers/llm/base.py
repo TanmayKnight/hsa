@@ -37,9 +37,22 @@ class LLMProvider(ABC):
         """
 
     @abstractmethod
-    def summarize(self, article: Article) -> str:
+    def rewrite_articles(self, articles: List[Article]) -> str:
         """
-        Summarize the article into 3-4 sentences.
-        Must paraphrase to avoid plagiarism — do not copy sentences verbatim.
+        Rewrite one or more versions of the same news story into a single, unified
+        300-500 word article in the publication's own voice.
+
+        When multiple articles are provided they cover the same event from different
+        newspapers/perspectives. The output must be factually accurate, unbiased, and
+        present all significant viewpoints without favouring any one source.
+
+        Returns a plain string (the rewritten article body, no title).
+        """
+
+    @abstractmethod
+    def summarize(self, rewritten_content: str) -> str:
+        """
+        Summarize the rewritten article into 4-5 sentences for the email digest.
+        Must paraphrase — do not copy sentences verbatim.
         Returns a plain string (the summary).
         """

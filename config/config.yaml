@@ -20,8 +20,9 @@ email:
   subscribers:
     - tableaulancer@gmail.com
     - curiousmindshex@gmail.com
-  # Digest email subject/header title
-  title: "Daily News Digest"
+  # Digest email subject/header title and newspaper branding
+  title: "The American Express Times"
+  newspaper_name: "The American Express Times"
   # Subscribe/unsubscribe page URLs — update these once the website is live
   subscribe_url: "#"
   unsubscribe_url: "#"
@@ -31,10 +32,29 @@ email:
   # Used when send_immediately is false:
   schedule_cron: "0 8 * * *" # 8 AM daily
 
+# Website Configuration
+website:
+  # Base URL used for "Read Full Article" links in the email.
+  # Change to your production domain once deployed.
+  base_url: "http://localhost:3001"
+
+# Rewriter Configuration
+rewriter:
+  # Cosine similarity threshold for grouping same-story articles across newspapers.
+  # Lower = more aggressive grouping (0.70-0.85 recommended).
+  grouping_threshold: 0.80
+
 # Deduplication Configuration
 deduplication:
-  # Cosine similarity threshold (0-1). Articles above this are considered duplicates.
+  # Cosine similarity threshold for cross-run duplicate detection (0-1).
+  # Articles above this are considered already-published duplicates and skipped.
   similarity_threshold: 0.85
+
+# Processing Safeguards
+processing:
+  # Articles from newspapers older than this many days are saved to the archive
+  # but excluded from the email digest. Set to 0 to disable.
+  max_newspaper_age_days: 3
 
 # Logging
 logging:

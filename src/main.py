@@ -6,6 +6,7 @@ Usage:
     python src/main.py --process-existing       # Process all existing PDFs in inbox, then watch
     python src/main.py --run-once               # Process existing PDFs and exit (no watching)
     python src/main.py --resend-last            # Resend last digest email without reprocessing PDFs
+    python src/main.py --generate-weekly DATE   # Generate weekly edition for DATE (YYYY-MM-DD) and exit
 """
 
 import argparse
@@ -21,6 +22,8 @@ from src.watcher import FolderWatcher
 from src.pipeline import Pipeline
 from src.digest_store import DigestStore
 from src.email_sender import EmailSender
+from src.providers.db import get_db_provider
+from src.weekly_scheduler import WeeklyScheduler
 
 
 def setup_logging(log_level: str, log_file: str) -> None:
@@ -59,6 +62,11 @@ def main() -> None:
         action="store_true",
         help="Resend the last digest email without reprocessing any PDFs",
     )
+    parser.add_argument(
+        "--generate-weekly",
+        metavar="DATE",
+        help="Generate weekly edition PDF for DATE (YYYY-MM-DD) and exit",
+    )
     args = parser.parse_args()
 
     config = load_config()
@@ -66,9 +74,27 @@ def main() -> None:
 
     logger = logging.getLogger(__name__)
 
+    db = get_db_provider()
+
+    if args.generate_weekly:
+        edition_date = args.generate_weekly
+        logger.info("Generating weekly edition for %s...", edition_date)
+        from src.newspaper_generator import NewspaperGenerator
+        job_id = db.create_weekly_edition_job(edition_date)
+        from src.providers.db.base import WeeklyEditionJob
+        job = WeeklyEditionJob(id=job_id, edition_date=edition_date)
+        generator = NewspaperGenerator()
+        try:
+            generator.run_job(job)
+            logger.info("Done.")
+        except Exception as exc:
+            logger.error("Failed: %s", exc)
+            sys.exit(1)
+        return
+
     if args.resend_last:
         logger.info("Resending last digest...")
-        articles = DigestStore().load_last_digest()
+        articles = DigestStore(db).load_last_digest()
         if not articles:
             logger.error("No saved digest found. Process a PDF first.")
             sys.exit(1)
@@ -87,6 +113,8 @@ def main() -> None:
         pipeline.run()  # Process all existing inbox files
 
     if not args.run_once:
+        scheduler = WeeklyScheduler()
+        scheduler.start()
         watcher = FolderWatcher(config)
         watcher.start()
 

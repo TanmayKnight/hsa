@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 import os
 from watchdog.observers import Observer
@@ -9,16 +10,28 @@ from src.pipeline import Pipeline
 
 logger = logging.getLogger(__name__)
 
-# Wait this many seconds after file creation before processing
-# (allows large files time to finish copying/uploading)
-FILE_SETTLE_DELAY = 3.0
+# Wait this many seconds after a PDF is first detected before triggering the pipeline.
+# Allows multiple PDFs dropped at roughly the same time to be batched together,
+# and gives large files time to finish copying.
+FILE_SETTLE_DELAY = 5.0
 
 
 class PDFHandler(FileSystemEventHandler):
-    """Watchdog handler that triggers the pipeline when a PDF is dropped in the inbox."""
+    """
+    Watchdog handler that batches new PDFs and triggers a single pipeline run.
+
+    When a PDF is detected:
+    - A timer is (re-)started for FILE_SETTLE_DELAY seconds.
+    - When the timer fires, pipeline.run() is called with no specific path —
+      it picks up ALL PDFs currently in the inbox so they are processed together
+      (important for multi-newspaper story grouping and perspective synthesis).
+    - A threading lock prevents concurrent pipeline runs.
+    """
 
     def __init__(self, pipeline: Pipeline):
         self.pipeline = pipeline
+        self._lock = threading.Lock()
+        self._timer: threading.Timer = None
         super().__init__()
 
     def on_created(self, event: FileCreatedEvent) -> None:
@@ -27,21 +40,28 @@ class PDFHandler(FileSystemEventHandler):
         if not event.src_path.lower().endswith(".pdf"):
             return
 
-        pdf_path = os.path.abspath(event.src_path)
-        logger.info("New PDF detected: %s", os.path.basename(pdf_path))
+        logger.info("New PDF detected: %s", os.path.basename(event.src_path))
+        self._schedule_run()
 
-        # Brief delay to let the file finish writing
-        time.sleep(FILE_SETTLE_DELAY)
+    def _schedule_run(self) -> None:
+        """(Re-)start the settle timer. Resets if more PDFs arrive quickly."""
+        if self._timer is not None:
+            self._timer.cancel()
+        self._timer = threading.Timer(FILE_SETTLE_DELAY, self._run_pipeline)
+        self._timer.daemon = True
+        self._timer.start()
 
-        # Verify the file still exists (it may have been moved/deleted during settle)
-        if not os.path.exists(pdf_path):
-            logger.warning("File no longer exists after settle delay: %s", pdf_path)
+    def _run_pipeline(self) -> None:
+        """Run the pipeline, ensuring only one run happens at a time."""
+        if not self._lock.acquire(blocking=False):
+            logger.info("Pipeline already running — new PDFs will be picked up next time.")
             return
-
         try:
-            self.pipeline.run(pdf_paths=[pdf_path])
+            self.pipeline.run()   # no pdf_paths → processes all inbox PDFs as one batch
         except Exception as e:
-            logger.error("Pipeline error for %s: %s", pdf_path, e, exc_info=True)
+            logger.error("Pipeline error: %s", e, exc_info=True)
+        finally:
+            self._lock.release()
 
 
 class FolderWatcher:

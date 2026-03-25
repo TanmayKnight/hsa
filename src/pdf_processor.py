@@ -1,7 +1,7 @@
 import fitz  # PyMuPDF
 import logging
 import io
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +65,32 @@ class PDFProcessor:
                 "text": text.strip(),
             })
         return pages
+
+    def extract_page_thumbnail(
+        self, pdf_bytes: bytes, page_number: int, target_width: int = 800
+    ) -> Optional[bytes]:
+        """
+        Render a page and crop it to a 16:9 header image.
+        Returns JPEG bytes, or None on failure.
+        page_number is 1-indexed.
+        """
+        try:
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            try:
+                idx = max(0, min(page_number - 1, len(doc) - 1))
+                page = doc[idx]
+                scale = target_width / page.rect.width
+                # Crop to 16:9 from the top (in page-space coordinates)
+                crop_height_pts = page.rect.width * 9 / 16
+                clip = fitz.Rect(0, 0, page.rect.width, min(page.rect.height, crop_height_pts))
+                matrix = fitz.Matrix(scale, scale)
+                pixmap = page.get_pixmap(matrix=matrix, clip=clip)
+                return pixmap.tobytes("jpeg")
+            finally:
+                doc.close()
+        except Exception as e:
+            logger.warning("Could not extract thumbnail from page %d: %s", page_number, e)
+            return None
 
     def _extract_as_images(self, doc: fitz.Document) -> List[Dict]:
         """

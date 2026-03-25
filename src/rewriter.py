@@ -1,0 +1,105 @@
+import logging
+import re
+from datetime import datetime
+from typing import List, Tuple
+
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+
+from src.models import Article
+from src.providers.llm.base import LLMProvider
+
+logger = logging.getLogger(__name__)
+
+
+def generate_slug(title: str, date: datetime = None) -> str:
+    """Convert an article title + date into a URL-safe slug."""
+    if date is None:
+        date = datetime.now()
+    slug = title.lower()
+    slug = re.sub(r"[^\w\s-]", "", slug)
+    slug = re.sub(r"[\s_]+", "-", slug.strip())
+    slug = slug[:55].rstrip("-")
+    date_str = date.strftime("%Y-%m-%d")
+    return f"{slug}-{date_str}"
+
+
+class Rewriter:
+    """
+    Groups same-story articles from multiple newspapers and rewrites each
+    group into a single unified, unbiased 300-500 word article.
+
+    Two-step process:
+    1. group_by_story()  — clusters articles by semantic similarity
+    2. rewrite()         — calls the LLM to produce one article per group
+    """
+
+    def __init__(self, llm_provider: LLMProvider, grouping_threshold: float = 0.80):
+        self.llm = llm_provider
+        self.grouping_threshold = grouping_threshold
+
+    def group_by_story(
+        self, articles: List[Article]
+    ) -> List[Tuple[List[Article], List[float]]]:
+        """
+        Cluster articles by semantic similarity.
+
+        Returns a list of (group, representative_embedding) tuples where:
+        - group  = list of Article objects covering the same story
+        - representative_embedding = embedding of the first/primary article in the group
+          (reused later for cross-run duplicate detection to avoid redundant API calls)
+        """
+        if not articles:
+            return []
+
+        logger.info("Generating embeddings for %d articles to group by story...", len(articles))
+        embeddings: List[List[float]] = []
+        for article in articles:
+            embed_text = f"{article.title}\n\n{article.content[:2000]}"
+            embeddings.append(self.llm.get_embedding(embed_text))
+
+        assigned = [False] * len(articles)
+        groups: List[Tuple[List[Article], List[float]]] = []
+
+        for i in range(len(articles)):
+            if assigned[i]:
+                continue
+
+            group = [articles[i]]
+            assigned[i] = True
+
+            vec_i = np.array(embeddings[i]).reshape(1, -1)
+            for j in range(i + 1, len(articles)):
+                if assigned[j]:
+                    continue
+                vec_j = np.array(embeddings[j]).reshape(1, -1)
+                sim = float(cosine_similarity(vec_i, vec_j)[0][0])
+                if sim >= self.grouping_threshold:
+                    group.append(articles[j])
+                    assigned[j] = True
+                    logger.info(
+                        "  Grouped '%s' with '%s' (similarity: %.3f)",
+                        articles[i].title,
+                        articles[j].title,
+                        sim,
+                    )
+
+            groups.append((group, embeddings[i]))
+
+        multi = sum(1 for g, _ in groups if len(g) > 1)
+        logger.info(
+            "Grouped %d articles into %d stories (%d multi-source groups)",
+            len(articles),
+            len(groups),
+            multi,
+        )
+        return groups
+
+    def rewrite(self, articles: List[Article]) -> str:
+        """
+        Rewrite a group of articles (same story, possibly from different sources)
+        into one unified 300-500 word article.
+        """
+        titles = " / ".join(a.title for a in articles)
+        logger.info("Rewriting: '%s' (%d source(s))", titles[:80], len(articles))
+        return self.llm.rewrite_articles(articles)

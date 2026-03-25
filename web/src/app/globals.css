@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { scroll-behavior: smooth; }
+  body { @apply bg-parchment text-gray-800; }
+
+  h1, h2, h3, h4 { @apply font-serif; }
+
+  /* Newspaper-style article body typography */
+  .article-body p {
+    @apply mb-5 leading-relaxed text-gray-700;
+  }
+  /* Drop cap in flag red */
+  .article-body p:first-child::first-letter {
+    @apply float-left font-bold leading-none pr-2 pt-1 font-serif;
+    font-size: 3.5rem;
+    line-height: 0.8;
+    color: #B22234;
+  }
+}
+
+@layer components {
+  .section-tag {
+    @apply text-xs font-bold uppercase tracking-widest px-2 py-0.5 rounded;
+  }
+  .card-hover {
+    @apply transition-shadow duration-200 hover:shadow-md;
+  }
+  .divider {
+    @apply border-t border-gray-200 my-4;
+  }
+  /* Classic newspaper double-rule */
+  .double-rule {
+    border-top: 3px double #1B2D5E;
+  }
+  /* Thin red rule — flag accent */
+  .red-rule {
+    border-top: 2px solid #B22234;
+  }
+}

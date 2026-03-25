@@ -8,6 +8,16 @@ load_dotenv()
 
 
 @dataclass
+class WebsiteConfig:
+    base_url: str   # e.g. http://localhost:3000 or https://yoursite.com
+
+
+@dataclass
+class RewriterConfig:
+    grouping_threshold: float   # cosine similarity threshold for same-story grouping
+
+
+@dataclass
 class LLMConfig:
     provider: str         # "gemini" or "openai"
     model: str            # e.g. "gemini-2.5-flash" — used for extraction & summarization
@@ -32,6 +42,7 @@ class EmailConfig:
     send_immediately: bool
     schedule_cron: str
     title: str
+    newspaper_name: str
     subscribe_url: str
     unsubscribe_url: str
 
@@ -41,9 +52,12 @@ class AppConfig:
     llm: LLMConfig
     storage: StorageConfig
     email: EmailConfig
+    website: WebsiteConfig
+    rewriter: RewriterConfig
     dedup_threshold: float
     log_level: str
     log_file: str
+    max_newspaper_age_days: int = 3  # 0 = disabled
 
 
 def load_config(config_path: str = "config/config.yaml") -> AppConfig:
@@ -53,6 +67,9 @@ def load_config(config_path: str = "config/config.yaml") -> AppConfig:
     llm_cfg = raw["llm"]
     storage_cfg = raw["storage"]
     email_cfg = raw["email"]
+
+    website_cfg = raw.get("website", {})
+    rewriter_cfg = raw.get("rewriter", {})
 
     return AppConfig(
         llm=LLMConfig(
@@ -75,10 +92,18 @@ def load_config(config_path: str = "config/config.yaml") -> AppConfig:
             send_immediately=email_cfg.get("send_immediately", True),
             schedule_cron=email_cfg.get("schedule_cron", "0 8 * * *"),
             title=email_cfg.get("title", "Daily News Digest"),
+            newspaper_name=email_cfg.get("newspaper_name", "The American Express Times"),
             subscribe_url=email_cfg.get("subscribe_url", "#"),
             unsubscribe_url=email_cfg.get("unsubscribe_url", "#"),
+        ),
+        website=WebsiteConfig(
+            base_url=os.getenv("WEBSITE_BASE_URL", website_cfg.get("base_url", "http://localhost:3000")),
+        ),
+        rewriter=RewriterConfig(
+            grouping_threshold=float(rewriter_cfg.get("grouping_threshold", 0.80)),
         ),
         dedup_threshold=raw["deduplication"]["similarity_threshold"],
         log_level=raw.get("logging", {}).get("level", "INFO"),
         log_file=raw.get("logging", {}).get("log_file", "./logs/app.log"),
+        max_newspaper_age_days=int(raw.get("processing", {}).get("max_newspaper_age_days", 3)),
     )
